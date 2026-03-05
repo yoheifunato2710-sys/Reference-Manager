@@ -135,7 +135,8 @@ export default function PaperManager() {
 
   // データフォルダ（OneDrive等）連携
   const [dataDirHandle, setDataDirHandle] = useState(null);
-  const [dataReady, setDataReady] = useState(false);
+  // ブラウザでは起動時に自動読み込みしないため、Electron でないときは最初から true にしておく（一瞬のエラー表示を防ぐ）
+  const [dataReady, setDataReady] = useState(() => typeof window !== "undefined" && !window.electronAPI);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null); // フォルダから読んだPDFの表示用URL
@@ -167,7 +168,9 @@ export default function PaperManager() {
         if (Array.isArray(data.folders) && data.folders.length) setFolders(data.folders);
       }
     } catch (e) {
-      setLoadError(e?.message || String(e));
+      const msg = e?.message || String(e);
+      setLoadError(msg);
+      alert("フォルダの読み込みに失敗しました。\n\n" + msg);
     }
   }, []);
   const loadFromFile = useCallback(async () => {
@@ -201,16 +204,22 @@ export default function PaperManager() {
   const [pendingPdf, setPendingPdf] = useState(null); // PDFドロップ待ち
   const [pdfDragOver, setPdfDragOver] = useState(false);
 
-  // ── 起動時: 保存済みフォルダからデータを読む（requestPermission はユーザー操作時のみなのでここでは呼ばない） ─────────────────────
+  // ── 起動時: 保存済みフォルダからデータを読む ─────────────────────────────────────────
+  // ブラウザではユーザー操作なしでフォルダにアクセスすると requestPermission エラーになるため、
+  // Electron のときだけ自動読み込みする。ブラウザは何も触らずウェルカム表示のみ。
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const handle = await storage.getDataDirHandle();
-      if (cancelled || !handle) {
+    const p = (async () => {
+      if (!storage.isElectron()) {
         setDataReady(true);
         return;
       }
       try {
+        const handle = await storage.getDataDirHandle();
+        if (cancelled || !handle) {
+          setDataReady(true);
+          return;
+        }
         const data = await storage.readDataFromFolder(handle);
         if (cancelled) return;
         if (data) {
@@ -221,19 +230,14 @@ export default function PaperManager() {
         }
         setDataDirHandle(handle);
       } catch (e) {
-        const msg = e?.message || String(e);
-        const isPermissionError = /user activation|requestPermission|permission/i.test(msg);
         if (!cancelled) {
-          if (isPermissionError) {
-            await storage.clearDataDirHandle();
-            setLoadError("");
-          } else {
-            setLoadError(msg);
-          }
+          await storage.clearDataDirHandle();
+          setLoadError("");
         }
       }
       if (!cancelled) setDataReady(true);
     })();
+    p.catch(() => {}); // 未処理の reject を防ぎ、Vite のエラーオーバーレイを出さない
     return () => { cancelled = true; };
   }, []);
 
@@ -594,7 +598,6 @@ ${pasteText.slice(0, 12000)}`;
         <p style={{ fontSize: 13, color: "#64748b", marginBottom: 28, textAlign: "center", maxWidth: 360 }}>
           OneDriveなど任意のフォルダにデータを保存できます。同じフォルダを選べばどの端末からでも同じデータを参照できます。
         </p>
-        {loadError && <p style={{ color: "#f87171", fontSize: 12, marginBottom: 16 }}>{loadError}</p>}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 320 }}>
           {storage.hasFolderAccess() && (
             <button type="button" className="welcome-btn primary" onClick={loadFromFolder}>
@@ -652,6 +655,7 @@ ${pasteText.slice(0, 12000)}`;
         <div style={{ padding: "22px 18px 14px", borderBottom: "1px solid #131929" }}>
           <div style={{ ...mono(9, "0.2em"), color: "#1e2d4a", marginBottom: 5 }}>PAPER MANAGER</div>
           <div style={{ fontSize: 19, fontWeight: 300, letterSpacing: "0.01em" }}>文献管理</div>
+          <div style={{ ...mono(9), color: "#1a2235", marginTop: 4 }}>ver {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.1'}</div>
         </div>
 
         {/* ショートカット（一番上に配置して確実に表示） */}

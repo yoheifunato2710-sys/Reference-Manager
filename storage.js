@@ -9,7 +9,8 @@ const PDF_SUBDIR = 'pdfs';
 const IDB_NAME = 'paper-manager-storage';
 const IDB_KEY = 'dataDirHandle';
 
-const isElectron = () => typeof window !== 'undefined' && window.electronAPI;
+/** Electron 環境か（ブラウザでは起動時の自動読み込みで権限エラーになるため判定に使用） */
+export const isElectron = () => typeof window !== 'undefined' && window.electronAPI;
 
 /** IndexedDB にディレクトリハンドルを保存（ブラウザ用。Electron では不要） */
 export async function saveDataDirHandle(handle) {

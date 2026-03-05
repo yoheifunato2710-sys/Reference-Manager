@@ -3,9 +3,15 @@ const path = require('path');
 const fs = require('fs').promises;
 const { execSync } = require('child_process');
 
+const pkg = require('../package.json');
+const APP_VERSION = pkg.version || '1.0.0';
+
 const DATA_FILE = 'paper-manager-data.json';
 const PDF_SUBDIR = 'pdfs';
 const CONFIG_FILE = 'data-folder.json';
+
+// デフォルトのデータフォルダ（選択せず直接開く）
+const DEFAULT_DATA_FOLDER = path.join('G:', 'マイドライブ', '論文管理アプリデータ');
 
 function getConfigPath() {
   return path.join(app.getPath('userData'), CONFIG_FILE);
@@ -15,10 +21,11 @@ async function getDataFolderPath() {
   try {
     const p = await fs.readFile(getConfigPath(), 'utf8');
     const j = JSON.parse(p);
-    return j.folderPath || null;
+    if (j.folderPath) return j.folderPath;
   } catch {
-    return null;
+    /* 設定なし */
   }
+  return DEFAULT_DATA_FOLDER;
 }
 
 async function setDataFolderPath(folderPath) {
@@ -36,7 +43,7 @@ function createWindow() {
       nodeIntegration: false,
       webSecurity: false, // フォルダ内 PDF を iframe で表示するため
     },
-    title: '文献管理 - Paper Manager',
+    title: `文献管理 - Paper Manager v${APP_VERSION}`,
   });
 
   if (process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV) {
@@ -129,7 +136,7 @@ function createShortcut(targetLnkPath, exePath, workingDir) {
 ipcMain.handle('create-desktop-shortcut', async () => {
   const desktop = app.getPath('desktop');
   const exePath = process.execPath;
-  const lnkPath = path.join(desktop, '文献管理.lnk');
+  const lnkPath = path.join(desktop, `文献管理 v${APP_VERSION}.lnk`);
   try {
     createShortcut(lnkPath, exePath);
     return { ok: true, path: lnkPath };
@@ -143,7 +150,7 @@ ipcMain.handle('create-folder-shortcut', async () => {
   const folderPath = await getDataFolderPath();
   if (!folderPath) return { ok: false, error: 'フォルダが選択されていません' };
   const exePath = process.execPath;
-  const lnkPath = path.join(folderPath, '文献管理を開く.lnk');
+  const lnkPath = path.join(folderPath, `文献管理を開く v${APP_VERSION}.lnk`);
   try {
     createShortcut(lnkPath, exePath, folderPath);
     return { ok: true, path: lnkPath };
